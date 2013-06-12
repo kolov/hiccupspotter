@@ -15,39 +15,46 @@ import java.util.Random;
  */
 public class Spotter {
 
+    private static final int CHECK_PERIOD = 20000;
+    private static final int CHECK_DEVIATION = 5000;
+    private static final int THRESHOLD_SLOW = 3000;
+    private static final int THRESHOLD_VERY_SLOW = 15000;
 
     private byte[] buf = new byte[100000];
     private Random r = new Random();
     private DateFormat df = new SimpleDateFormat("dd/MM/yy kk:mm:ss");
 
 
-
     public static void main(String[] args) throws MalformedURLException {
         URL url = new URL("http://www.google.com");
-        System.out.println("Fetching " + url);
-        System.out.println("Press Ctrl-D to exit");
         new Spotter().go(url);
     }
 
     public void go(URL url) {
-
+        println("Checking " + url + " every " + CHECK_PERIOD + "ms");
+        println("Press Ctrl-D to exit");
         startKeyboardThread(Thread.currentThread());
         Stats stats = new Stats();
 
         while (true) {
             long duration = readUrl(url);
-             stats.process(duration);
-            System.out.println(df.format(new Date()) + ": " + (duration == -1 ? " timeout" : Long.toString(duration) + "ms"));
-            if (duration > 2000) {
+            stats.process(duration);
+            println(df.format(new Date()) + ": " + (duration == -1 ? " timeout" : Long.toString(duration) + "ms"));
+            if (duration > THRESHOLD_SLOW) {
                 System.out.println("!");
             }
 
-            if (sleep(20000, 5000)) {
+            if (stopRequested(CHECK_PERIOD, CHECK_DEVIATION)) {
                 break;
             }
         }
+        println("Exit");
         stats.print();
 
+    }
+
+    private void println(String txt) {
+        System.out.println(txt);
     }
 
     private void startKeyboardThread(final Thread otherThread) {
@@ -69,7 +76,7 @@ public class Spotter {
     }
 
 
-    private boolean sleep(int period, int deviation) {
+    private boolean stopRequested(int period, int deviation) {
         try {
             Thread.sleep(period - deviation / 2 + r.nextInt(deviation));
         } catch (InterruptedException e) {
@@ -98,39 +105,43 @@ public class Spotter {
     }
 
     private class Stats {
-            long min = Integer.MAX_VALUE;
-            long max = Integer.MIN_VALUE;
-            private int count = 0;
-            private long createdAt = System.currentTimeMillis();
-            private int failed = 0;
-            private int slow = 0;
+        long min = Integer.MAX_VALUE;
+        long max = Integer.MIN_VALUE;
+        private int count = 0;
+        private long createdAt = System.currentTimeMillis();
+        private int failed = 0;
+        private int slow = 0;
+        private int verySlow = 0;
 
-            public void process(long time) {
-                if (time > -1) {
-                    if (time > max) {
-                        max = time;
-                    }
-                    if (time < min) {
-                        min = time;
-                    }
-                    if (time > 15000) {
-                        slow++;
-                    }
-
-                } else {
-                    failed++;
+        public void process(long time) {
+            if (time > -1) {
+                if (time > max) {
+                    max = time;
                 }
-                count++;
-            }
+                if (time < min) {
+                    min = time;
+                }
+                if (time > THRESHOLD_SLOW) {
+                    slow++;
+                }
+                if (time > THRESHOLD_VERY_SLOW) {
+                    verySlow++;
+                }
 
-            public void print() {
-                long now = System.currentTimeMillis();
-                System.out.println("" + count + " requests" + " in " + (now - createdAt) + "ms");
-                System.out.println("Total: " + count);
-                System.out.println("min/max: " + min + "/" + max);
-                System.out.println("Failed: " + failed);
-                System.out.println(">15s: " + slow);
+            } else {
+                failed++;
             }
+            count++;
         }
+
+        public void print() {
+            long now = System.currentTimeMillis();
+            println("" + count + " requests" + " in " + (now - createdAt) + "ms");
+            println("min/max: " + min + "/" + max);
+            println("failed: " + failed);
+            println("slow: " + slow);
+            println("verySlow: " + verySlow);
+        }
+    }
 
 }
